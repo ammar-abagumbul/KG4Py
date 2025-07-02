@@ -97,7 +97,8 @@ def extract_repository_src_files(source: str) -> List[str]:
             if any(file.endswith(ext) for ext in WHITELISTED_EXTENSIONS):
                 file_path = os.path.join(root, file)
                 source_files.append(file_path)
-                logger.info(f"Found source file: {file_path}")
+                if VERBOSE:
+                    logger.info(f"Found source file: {file_path}")
     return source_files
 
 def extract_from_file(file_path: str) -> dict:
@@ -121,56 +122,77 @@ def extract_from_file(file_path: str) -> dict:
         logger.error(f"Error parsing file {file_path}: {e}")
         return {}
 
+def escape_cypher_string(value: str) -> str:
+    """Properly escape a string for use in Cypher queries."""
+    if value is None:
+        return 'null'
+    
+    escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
+    escaped = escaped.replace('\n', '\\n').replace('\r', '\\r')
+    escaped = escaped.replace('\t', '\\t')
+    
+    return f'"{escaped}"'
+
+
 def build_cypher_queries(module_info: dict) -> List[str]:
-    """Build Cypher queries from the extracted module information."""
+    """Build Cypher queries from the extracted module information.
+    
+    Returns list of properly escaped string queries ready for execution.
+    """
     queries = []
     
     # Create Module node
-    module_name = module_info['name']
-    module_doc = module_info['docstring'].replace('"', '\\"')
+    module_name = escape_cypher_string(module_info['name'])
+    module_doc = escape_cypher_string(module_info['docstring'])
     queries.append(
-        f'MERGE (m:Module {{name: "{module_name}"}}) '
-        f'SET m.docstring = "{module_doc}"'
+        f'MERGE (m:Module {{name: {module_name}}}) '
+        f'SET m.docstring = {module_doc}'
     )
     
     # Create Import relationships
     for imp in module_info['imports']:
         if imp:
+            import_name = escape_cypher_string(imp)
+            module_name_escaped = escape_cypher_string(module_info['name'])
             queries.append(
-                f'MERGE (i:Module {{name: "{imp}"}}) '
-                f'MERGE (m:Module {{name: "{module_name}"}}) '
+                f'MERGE (i:Module {{name: {import_name}}}) '
+                f'MERGE (m:Module {{name: {module_name_escaped}}}) '
                 f'MERGE (m)-[:IMPORTS]->(i)'
             )
     
     # Create Class nodes and relationships
     for cls in module_info['classes']:
-        cls_name = cls['name']
-        cls_doc = cls['docstring'].replace('"', '\\"')
+        cls_name = escape_cypher_string(cls['name'])
+        cls_doc = escape_cypher_string(cls['docstring'])
+        module_name_escaped = escape_cypher_string(module_info['name'])
         queries.append(
-            f'MERGE (c:Class {{name: "{cls_name}"}}) '
-            f'SET c.docstring = "{cls_doc}" '
-            f'MERGE (m:Module {{name: "{module_name}"}}) '
+            f'MERGE (c:Class {{name: {cls_name}}}) '
+            f'SET c.docstring = {cls_doc} '
+            f'MERGE (m:Module {{name: {module_name_escaped}}}) '
             f'MERGE (m)-[:CONTAINS]->(c)'
         )
+        
         # Create Method nodes and relationships
         for method in cls['methods']:
-            method_name = method['name']
-            method_doc = method['docstring'].replace('"', '\\"')
+            method_name = escape_cypher_string(method['name'])
+            method_doc = escape_cypher_string(method['docstring'])
+            cls_name_escaped = escape_cypher_string(cls['name'])
             queries.append(
-                f'MERGE (meth:Function {{name: "{method_name}"}}) '
-                f'SET meth.docstring = "{method_doc}" '
-                f'MERGE (c:Class {{name: "{cls_name}"}}) '
+                f'MERGE (meth:Function {{name: {method_name}}}) '
+                f'SET meth.docstring = {method_doc} '
+                f'MERGE (c:Class {{name: {cls_name_escaped}}}) '
                 f'MERGE (c)-[:HAS_METHOD]->(meth)'
             )
     
     # Create Function nodes and relationships
     for func in module_info['functions']:
-        func_name = func['name']
-        func_doc = func['docstring'].replace('"', '\\"')
+        func_name = escape_cypher_string(func['name'])
+        func_doc = escape_cypher_string(func['docstring'])
+        module_name_escaped = escape_cypher_string(module_info['name'])
         queries.append(
-            f'MERGE (f:Function {{name: "{func_name}"}}) '
-            f'SET f.docstring = "{func_doc}" '
-            f'MERGE (m:Module {{name: "{module_name}"}}) '
+            f'MERGE (f:Function {{name: {func_name}}}) '
+            f'SET f.docstring = {func_doc} '
+            f'MERGE (m:Module {{name: {module_name_escaped}}}) '
             f'MERGE (m)-[:CONTAINS]->(f)'
         )
     
@@ -203,6 +225,9 @@ def execute_cypher(driver: Driver, query: str, max_retries: int = 3, retry_delay
             if attempt < max_retries - 1:
                 logger.info(f"Retrying query execution in {retry_delay} seconds...")
                 time.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to execute Cypher query after {max_retries} attempts: {query}")
+                logger.error(f"Error details: {e}")
     logger.error("Failed to execute Cypher query after all retries.")
     return False
 
@@ -217,7 +242,8 @@ def populate_graph(driver: object, source_files: List[str]) -> None:
     
     # Process each source file
     for file_path in source_files:
-        logger.info(f"Processing file: {file_path}")
+        if VERBOSE:
+            logger.info(f"Processing file: {file_path}")
         module_info = extract_from_file(file_path)
         if module_info:
             queries = build_cypher_queries(module_info)

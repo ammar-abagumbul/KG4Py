@@ -18,13 +18,40 @@ class ImportExtractor(cst.CSTVisitor):
         self.imports = []
 
     def visit_Import(self, node: cst.Import) -> None:
+        """Handle 'import module' statements."""
         for name in node.names:
-            if name.evaluated_name:
-                self.imports.append(name.evaluated_name)
-
+            if isinstance(name, cst.ImportAlias):
+                # Get the module name
+                module_name = self._get_full_name(name.name)
+                self.imports.append(module_name)
+    
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        if node.module and node.module.evaluated_name:
-            self.imports.append(node.module.evaluated_name)
+        """Handle 'from module import ...' statements."""
+        if node.module:
+            # Get the base module name
+            base_module = self._get_full_name(node.module)
+            
+            # Handle the imported names
+            if isinstance(node.names, cst.ImportStar):
+                # from module import *
+                self.imports.append(f"{base_module}.*")
+            else:
+                # from module import name1, name2, ...
+                for name in node.names:
+                    if isinstance(name, cst.ImportAlias):
+                        imported_name = self._get_full_name(name.name)
+                        full_import = f"{base_module}.{imported_name}"
+                        self.imports.append(full_import)
+    def _get_full_name(self, node) -> str:
+        """Extract the full dotted name from a Name or Attribute node."""
+        if isinstance(node, cst.Name):
+            return node.value
+        elif isinstance(node, cst.Attribute):
+            # Handle dotted imports like 'os.path'
+            return f"{self._get_full_name(node.value)}.{node.attr.value}"
+        else:
+            return str(node)
+
 
 class ClassExtractor(cst.CSTVisitor):
     """Extractor for class definitions, including docstrings and methods."""
@@ -57,12 +84,13 @@ class FunctionExtractor(cst.CSTVisitor):
     """Extractor for top-level function definitions and their docstrings."""
     def __init__(self):
         self.functions = []
+        self.depth = 0
 
     def visit_ClassDef(self, node: cst.ClassDef) -> None:
-        self.depth = 1
+        self.depth += 1
 
     def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
-        self.depth = 0
+        self.depth -= 1
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         # Only extract top-level functions (not methods within classes)
