@@ -5,6 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "datasets>=4.0.0",
+    "huggingface-hub>=0.33.4",
     "libcst>=1.8.2",
     "neo4j>=5.28.1",
+    "pandas>=2.3.1",
+    "peft>=0.16.0",
+    "pydantic>=2.11.7",
+    "scikit-learn>=1.7.1",
+    "sentence-transformers>=5.0.0",
+    "torch>=2.7.1",
+    "tqdm>=4.67.1",
+    "transformers>=4.53.2",
 ]
