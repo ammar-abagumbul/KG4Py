@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Manim Repo Knowledge Graph Schema",
+  "type": "object",
+  "properties": {
+    "Project": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the project."
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Module"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Module": {
+      "type": "object",
+      "properties": {
+        "docstring": {
+          "type": "string",
+          "description": "A brief description of the module."
+        },
+        "imports": {
+          "type": "array",
+          "description": "List of modules imported by this module.",
+          "items": {
+            "type": "string",
+            "description": "Module imported by this module."
+          }
+        },
+        "classes": {
+          "type": "array",
+          "description": "List of classes defined in this module.",
+          "item": {
+            "$ref": "#/definitions/Class"
+          }
+        },
+        "functions": {
+          "type": "array",
+          "description": "List of classes defined in this class.",
+          "items": {
+            "$ref": "#/definitions/Function"
+          }
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "Class": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the class."
+        },
+        "docstring": {
+          "type": "string",
+          "description": "A brief description of the class."
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Function"
+          }
+        },
+        "embeddings": {
+          "type": "array",
+          "description": "List of embeddings associated with this class.",
+          "items": {
+            "type": "number",
+            "description": "Embedding associated with this class."
+          }
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "Function": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the function."
+        },
+        "docstring": {
+          "type": "string",
+          "description": "A brief description of the function."
+        },
+        "code": {
+          "type": "string",
+          "description": "The code of the function."
+        },
+        "embeddings": {
+          "type": "array",
+          "description": "List of embeddings associated with this class.",
+          "items": {
+            "type": "number",
+            "description": "Embedding associated with this function."
+          }
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+}

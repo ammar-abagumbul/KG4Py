@@ -1,0 +1,72 @@
+{
+  "name": "tex",
+  "docstring": "Utilities for processing LaTeX templates.",
+  "imports": [
+    "__future__.annotations",
+    "copy",
+    "re",
+    "warnings",
+    "dataclasses.dataclass",
+    "dataclasses.field",
+    "pathlib.Path",
+    "typing.TYPE_CHECKING",
+    "typing.Any",
+    "typing_extensions.Self",
+    "manim.typing.StrPath"
+  ],
+  "classes": [
+    {
+      "name": "TexTemplate",
+      "docstring": "TeX templates are used to create ``Tex`` and ``MathTex`` objects.",
+      "methods": [
+        {
+          "name": "body",
+          "docstring": "The entire TeX template.",
+          "code": "\n@property\ndef body(self) -> str:\n    \"\"\"The entire TeX template.\"\"\"\n    return self._body or \"\\n\".join(\n        filter(\n            None,\n            [\n                self.documentclass,\n                self.preamble,\n                _BEGIN_DOCUMENT,\n                self.post_doc_commands,\n                self.placeholder_text,\n                _END_DOCUMENT,\n            ],\n        )\n    )\n"
+        },
+        {
+          "name": "body",
+          "docstring": "",
+          "code": "\n@body.setter\ndef body(self, value: str) -> None:\n    self._body = value\n"
+        },
+        {
+          "name": "from_file",
+          "docstring": "Create an instance by reading the content of a file.\n\nUsing the ``add_to_preamble`` and ``add_to_document`` methods on this instance\nwill have no effect, as the body is read from the file.",
+          "code": "\n@classmethod\ndef from_file(cls, file: StrPath = \"tex_template.tex\", **kwargs: Any) -> Self:\n    \"\"\"Create an instance by reading the content of a file.\n\n        Using the ``add_to_preamble`` and ``add_to_document`` methods on this instance\n        will have no effect, as the body is read from the file.\n        \"\"\"\n    instance = cls(**kwargs)\n    instance.body = Path(file).read_text(encoding=\"utf-8\")\n    return instance\n"
+        },
+        {
+          "name": "add_to_preamble",
+          "docstring": "Adds text to the TeX template's preamble (e.g. definitions, packages). Text can be inserted at the beginning or at the end of the preamble.\n\nParameters\n----------\ntxt\n    String containing the text to be added, e.g. ``\\usepackage{hyperref}``.\nprepend\n    Whether the text should be added at the beginning of the preamble, i.e. right after ``\\documentclass``.\n    Default is to add it at the end of the preamble, i.e. right before ``\\begin{document}``.",
+          "code": "\ndef add_to_preamble(self, txt: str, prepend: bool = False) -> Self:\n    r\"\"\"Adds text to the TeX template's preamble (e.g. definitions, packages). Text can be inserted at the beginning or at the end of the preamble.\n\n        Parameters\n        ----------\n        txt\n            String containing the text to be added, e.g. ``\\usepackage{hyperref}``.\n        prepend\n            Whether the text should be added at the beginning of the preamble, i.e. right after ``\\documentclass``.\n            Default is to add it at the end of the preamble, i.e. right before ``\\begin{document}``.\n        \"\"\"\n    if self._body:\n        warnings.warn(\n            \"This TeX template was created with a fixed body, trying to add text the preamble will have no effect.\",\n            UserWarning,\n            stacklevel=2,\n        )\n    if prepend:\n        self.preamble = txt + \"\\n\" + self.preamble\n    else:\n        self.preamble += \"\\n\" + txt\n    return self\n"
+        },
+        {
+          "name": "add_to_document",
+          "docstring": "Adds text to the TeX template just after \\begin{document}, e.g. ``\\boldmath``.\n\nParameters\n----------\ntxt\n    String containing the text to be added.",
+          "code": "\ndef add_to_document(self, txt: str) -> Self:\n    r\"\"\"Adds text to the TeX template just after \\begin{document}, e.g. ``\\boldmath``.\n\n        Parameters\n        ----------\n        txt\n            String containing the text to be added.\n        \"\"\"\n    if self._body:\n        warnings.warn(\n            \"This TeX template was created with a fixed body, trying to add text the document will have no effect.\",\n            UserWarning,\n            stacklevel=2,\n        )\n    self.post_doc_commands += txt\n    return self\n"
+        },
+        {
+          "name": "get_texcode_for_expression",
+          "docstring": "Inserts expression verbatim into TeX template.\n\nParameters\n----------\nexpression\n    The string containing the expression to be typeset, e.g. ``$\\sqrt{2}$``\n\nReturns\n-------\n:class:`str`\n    LaTeX code based on current template, containing the given ``expression`` and ready for typesetting",
+          "code": "\ndef get_texcode_for_expression(self, expression: str) -> str:\n    r\"\"\"Inserts expression verbatim into TeX template.\n\n        Parameters\n        ----------\n        expression\n            The string containing the expression to be typeset, e.g. ``$\\sqrt{2}$``\n\n        Returns\n        -------\n        :class:`str`\n            LaTeX code based on current template, containing the given ``expression`` and ready for typesetting\n        \"\"\"\n    return self.body.replace(self.placeholder_text, expression)\n"
+        },
+        {
+          "name": "get_texcode_for_expression_in_env",
+          "docstring": "Inserts expression into TeX template wrapped in ``\\begin{environment}`` and ``\\end{environment}``.\n\nParameters\n----------\nexpression\n    The string containing the expression to be typeset, e.g. ``$\\sqrt{2}$``.\nenvironment\n    The string containing the environment in which the expression should be typeset, e.g. ``align*``.\n\nReturns\n-------\n:class:`str`\n    LaTeX code based on template, containing the given expression inside its environment, ready for typesetting",
+          "code": "\ndef get_texcode_for_expression_in_env(\n    self, expression: str, environment: str\n) -> str:\n    r\"\"\"Inserts expression into TeX template wrapped in ``\\begin{environment}`` and ``\\end{environment}``.\n\n        Parameters\n        ----------\n        expression\n            The string containing the expression to be typeset, e.g. ``$\\sqrt{2}$``.\n        environment\n            The string containing the environment in which the expression should be typeset, e.g. ``align*``.\n\n        Returns\n        -------\n        :class:`str`\n            LaTeX code based on template, containing the given expression inside its environment, ready for typesetting\n        \"\"\"\n    begin, end = _texcode_for_environment(environment)\n    return self.body.replace(\n        self.placeholder_text, \"\\n\".join([begin, expression, end])\n    )\n"
+        },
+        {
+          "name": "copy",
+          "docstring": "Create a deep copy of the TeX template instance.",
+          "code": "\ndef copy(self) -> Self:\n    \"\"\"Create a deep copy of the TeX template instance.\"\"\"\n    return copy.deepcopy(self)\n"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "_texcode_for_environment",
+      "docstring": "Processes the tex_environment string to return the correct ``\\begin{environment}[extra]{extra}`` and\n``\\end{environment}`` strings.\n\nParameters\n----------\nenvironment\n    The tex_environment as a string. Acceptable formats include:\n    ``{align*}``, ``align*``, ``{tabular}[t]{cccl}``, ``tabular}{cccl``, ``\\begin{tabular}[t]{cccl}``.\n\nReturns\n-------\nTuple[:class:`str`, :class:`str`]\n    A pair of strings representing the opening and closing of the tex environment, e.g.\n    ``\\begin{tabular}{cccl}`` and ``\\end{tabular}``",
+      "code": "\n\ndef _texcode_for_environment(environment: str) -> tuple[str, str]:\n    r\"\"\"Processes the tex_environment string to return the correct ``\\begin{environment}[extra]{extra}`` and\n    ``\\end{environment}`` strings.\n\n    Parameters\n    ----------\n    environment\n        The tex_environment as a string. Acceptable formats include:\n        ``{align*}``, ``align*``, ``{tabular}[t]{cccl}``, ``tabular}{cccl``, ``\\begin{tabular}[t]{cccl}``.\n\n    Returns\n    -------\n    Tuple[:class:`str`, :class:`str`]\n        A pair of strings representing the opening and closing of the tex environment, e.g.\n        ``\\begin{tabular}{cccl}`` and ``\\end{tabular}``\n    \"\"\"\n    environment = environment.removeprefix(r\"\\begin\").removeprefix(\"{\")\n\n    # The \\begin command takes everything and closes with a brace\n    begin = r\"\\begin{\" + environment\n    # If it doesn't end on } or ], assume missing }\n    if not begin.endswith((\"}\", \"]\")):\n        begin += \"}\"\n\n    # While the \\end command terminates at the first closing brace\n    split_at_brace = re.split(\"}\", environment, maxsplit=1)\n    end = r\"\\end{\" + split_at_brace[0] + \"}\"\n\n    return begin, end\n"
+    }
+  ]
+}
