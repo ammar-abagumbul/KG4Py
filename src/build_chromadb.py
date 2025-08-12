@@ -2,7 +2,11 @@ import argparse
 import json
 import chromadb
 import tqdm
+import logging
 
+# Initialize logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -25,11 +29,14 @@ def parse_args():
         default="repo_embeddings",
         help="Name of the chromadb collection.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    logger.info("Parsed arguments: %s", args)
+    return args
 
 
 def main():
     args = parse_args()
+    logger.info("Starting database build process.")
     with open(args.json_file, "r", encoding="utf-8") as f:
         modules = json.load(f)
 
@@ -38,6 +45,7 @@ def main():
 
     items_to_add = []
     # Extract features and embedddings from modules
+    logger.info("Processing %d modules.", len(modules))
     for module in tqdm.tqdm(modules, desc="Processing modules"):
         # Classes
         try:
@@ -61,10 +69,11 @@ def main():
                         }
                     )
         except Exception as e:
-            print(f"Error processing module {module.get('name', 'unknown')}: {e}")
+            logger.error("Error processing module %s: %s", module.get('name', 'unknown'), e)
             continue
 
     # Add to chromadb
+    logger.info("Adding %d items to the database.", len(items_to_add))
     for idx, item in enumerate(
         tqdm.tqdm(items_to_add, desc="Adding items to chromadb")
     ):
@@ -75,11 +84,11 @@ def main():
                 metadatas=[{"name": item["name"], "type": item["type"]}],
             )
         except Exception as e:
-            print(
+            logger.error(
                 f'Error adding item {idx}, module name {item.get("name", "unknown")}: {e}'
             )
 
-    print(f"Chromadb database created at {args.db_dir}")
+    logger.info("Chromadb database created successfully at %s", args.db_dir)
 
 
 if __name__ == "__main__":

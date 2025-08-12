@@ -50,14 +50,16 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--embeddings", action="store_true", help="Generate embeddings database."
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    logger.info("Parsed arguments: %s", args)
+    return args
 
 
 def extract_repository_src_files(source: str) -> List[str]:
     """
     Identify source files in the repository/directory recursively.
     """
-    logger.info(f"Identifying source files in {source}.")
+    logger.info("Identifying source files in directory: %s", source)
 
     source_files = []
     for root, dirs, files in os.walk(source):
@@ -92,7 +94,7 @@ def extract_from_file(file_path: str, embeddings: bool = False) -> dict:
             "functions": extracted_info["functions"],
         }
     except Exception as e:
-        logger.error(f"Error parsing file {file_path}: {e}")
+        logger.error("Error parsing file %s: %s", file_path, e)
         return {}
 
 
@@ -104,7 +106,7 @@ def construct_json(
     """
     Construct a JSON file containing a list of extracted module features and embeddings.
     """
-    logger.info("Constructing JSON file with module features and embeddings.")
+    logger.info("Starting JSON construction with module features and embeddings.")
 
     try:
         logger.info(f"Output JSON file: {output_json}")
@@ -125,10 +127,10 @@ def construct_json(
         if extracted_data:
             with json_path.open("w", encoding="utf-8") as f:
                 json.dump(extracted_data, f, indent=4, cls=CompactJSONEncoder)
-            logger.info(f"JSON file created at {output_json}.")
+            logger.info("JSON file successfully created at %s.", output_json)
             return True
     except Exception as e:
-        logger.error(f"Error constructing JSON file: {e}")
+        logger.error("Error constructing JSON file: %s", e)
         return False
 
 

@@ -55,7 +55,9 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Clear all data in the Neo4j database before processing.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    logger.info("Parsed arguments: %s", args)
+    return args
 
 
 def connect_to_neo4j(
@@ -68,7 +70,7 @@ def connect_to_neo4j(
     user = NEO4J_USER
     password = NEO4J_PASSWORD
 
-    logger.info(f"Attempting to connect to Neo4j at {uri} with user {user}")
+    logger.info("Attempting to connect to Neo4j at %s with user %s", uri, user)
 
     for attempt in range(max_retries):
         try:
@@ -81,7 +83,7 @@ def connect_to_neo4j(
                     f"Neo4j connection error details (attempt {attempt + 1}/{max_retries}): {e}"
                 )
             if attempt < max_retries - 1:
-                logger.info(f"Retrying connection in {retry_delay} seconds...")
+                logger.info("Retrying connection in %s seconds (attempt %d/%d)...", retry_delay, attempt + 1, max_retries)
                 time.sleep(retry_delay)
     logger.error("Failed to connect to Neo4j after all retries.")
     return None
@@ -91,7 +93,7 @@ def extract_repository_src_files(source: str) -> List[str]:
     """
     Identify source files in the repository/directory recursively.
     """
-    logger.info(f"Identifying source files in {source}.")
+    logger.info("Identifying source files in directory: %s", source)
 
     source_files = []
     for root, dirs, files in os.walk(source):
@@ -233,7 +235,7 @@ def populate_graph(driver: object, json_path: str) -> None:
     This function orchestrates the parsing of Python source files and population of the Neo4j graph.
     Implements graceful degradation by continuing processing even if database operations fail.
     """
-    logger.info("Populating Neo4j graph with extracted content.")
+    logger.info("Starting to populate Neo4j graph with extracted content.")
     failed_files = []
     repo_info = json.load(json_path)
 
@@ -256,9 +258,9 @@ def populate_graph(driver: object, json_path: str) -> None:
         logger.warning(
             f"Completed with failures for {len(failed_files)} files. Data saved to fallback JSON files."
         )
-        logger.warning("Failed files: " + ", ".join(failed_files))
+        logger.warning("Failed files: %s", ", ".join(failed_files))
     else:
-        logger.info("Completed populating Neo4j graph with no failures.")
+        logger.info("Successfully completed populating Neo4j graph with no failures.")
 
 
 def main() -> int:

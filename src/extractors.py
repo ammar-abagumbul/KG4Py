@@ -1,7 +1,11 @@
 import torch
 import libcst as cst
 import numpy as np
+import logging
 from typing import Dict, Any, List, Callable
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 def preprocess_code(code: str) -> str:
@@ -10,7 +14,8 @@ def preprocess_code(code: str) -> str:
     code = code.replace("\t", " ").replace("    ", " ")
     while "  " in code:
         code = code.replace("  ", " ")
-    return code.strip()
+    result = code.strip()
+    return result
 
 
 class DocStringExtractor(cst.CSTVisitor):
@@ -108,7 +113,7 @@ class ClassExtractor(cst.CSTVisitor):
             self.current_class = class_info
             self.classes.append(class_info)
         except Exception as e:
-            print(f"Error processing class definition {node.name.value}: {e}")
+            logger.error("Error processing class definition %s: %s", node.name.value, e)
             self.current_class = {
                 "name": node.name.value,
                 "docstring": node.get_docstring() or "",
@@ -149,7 +154,9 @@ class ClassExtractor(cst.CSTVisitor):
                 }
                 self.current_class["methods"].append(method_info)
         except Exception as e:
-            print(f"Error processing method definition {node.name.value}: {e}")
+            logger.error(
+                "Error processing method definition %s: %s", node.name.value, e
+            )
             if self.current_class:
                 method_info = {
                     "name": node.name.value,
@@ -204,7 +211,9 @@ class FunctionExtractor(cst.CSTVisitor):
             self.functions.append(func_info)
 
         except Exception as e:
-            print(f"Error processing function definition {node.name.value}: {e}")
+            logger.error(
+                "Error processing function definition %s: %s", node.name.value, e
+            )
             func_info = {
                 "name": node.name.value,
                 "docstring": node.get_docstring() or "",
@@ -252,6 +261,7 @@ def aggregate_embeddings(
         # TODO: i might consider weighting different module components differently
         # weights = np.ones(len(embeddings)) / len(embeddings)
         # return np.average(embeddings, axis=0, weights=weights).tolist()
+        logger.warning("Weighted aggregation is not implemented yet.")
         raise NotImplementedError("Weighted aggregation is not implemented yet.")
     else:
         raise ValueError(f"Unknown strategy: {strategy}")

@@ -1,8 +1,12 @@
 import chromadb
 from unixcoder import UniXcoder
 import torch
+import logging
 
 from typing import List, Dict
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 class ChromaDBQueryEngine:
@@ -15,6 +19,11 @@ class ChromaDBQueryEngine:
             persist_directory (str): Directory where the ChromaDB database is stored.
             limit (int): Maximum number of results to return.
         """
+        logger.info(
+            "Initializing ChromaDBQueryEngine with collection: %s, persist directory: %s",
+            collection_name,
+            persist_directory,
+        )
         self.collection_name = collection_name
         self.persist_directory = persist_directory
 
@@ -29,6 +38,7 @@ class ChromaDBQueryEngine:
         self.limit = limit
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = UniXcoder("microsoft/unixcoder-base")
+        logger.info("UniXcoder model loaded and moved to device: %s", self.device)
         self.model.to(self.device)
 
     def embedd_query(self, query: str) -> list[float]:
@@ -38,6 +48,7 @@ class ChromaDBQueryEngine:
         source_id = torch.tensor(tokens_id, device=self.device)
         _, embedding = self.model(source_id)
         embedding = embedding.tolist()
+        logger.info("Embedding generated successfully. Length: %d", len(embedding))
         return embedding
 
     # TODO: check whether results.documents and results.scores are exist (probably a dict key instead of an attribute)
@@ -59,6 +70,7 @@ class ChromaDBQueryEngine:
 
         future work: more complex filters, e.g., regex matching, multiple conditions
         """
+        logger.info("Executing natural language query: %s", query)
         embedding = self.embedd_query(query)
         results = self.collection.query(
             query_embeddings=embedding, n_results=self.limit
@@ -73,6 +85,10 @@ class ChromaDBQueryEngine:
                     filtered_results.append(result)
             results.documents = filtered_results
         result = self.collection.query(query_embeddings=embedding, n_results=self.limit)
+        logger.info(
+            "Query executed successfully. Number of results: %d",
+            len(results.get("documents", [])),
+        )
         return results
 
     def execute_query_e(self, embedding: list[float]):
@@ -90,6 +106,7 @@ class ChromaDBQueryEngine:
             list[dict]: The reranked results.
         """
         # Placeholder for reranking logic
+        logger.warning("Reranking logic is not implemented yet.")
         raise NotImplementedError("Reranking logic is not implemented yet.")
 
 
