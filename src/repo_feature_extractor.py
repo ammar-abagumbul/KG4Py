@@ -90,6 +90,7 @@ def extract_from_file(file_path: str, embeddings: bool = False) -> dict:
             "name": module_name,
             "docstring": extracted_info["docstring"],
             "imports": extracted_info["imports"],
+            "embeddings": extracted_info["embeddings"],
             "classes": extracted_info["classes"],
             "functions": extracted_info["functions"],
         }

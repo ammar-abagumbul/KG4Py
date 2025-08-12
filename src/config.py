@@ -5,7 +5,7 @@ This file contains settings for connecting to Neo4j and defining content extract
 
 # Neo4j connection settings (placeholders, to be customized by user)
 import logging
-from src.logging_config import setup_logging
+from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
