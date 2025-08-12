@@ -1,6 +1,16 @@
 import torch
 import libcst as cst
-from typing import Dict, Any
+import numpy as np
+from typing import Dict, Any, List, Callable
+
+
+def preprocess_code(code: str) -> str:
+    """Preprocess code by removing line breaks, indentations, and normalizing whitespace."""
+    code = code.replace("\n", " ").replace("\r", " ")
+    code = code.replace("\t", " ").replace("    ", " ")
+    while "  " in code:
+        code = code.replace("  ", " ")
+    return code.strip()
 
 
 class DocStringExtractor(cst.CSTVisitor):
@@ -76,15 +86,15 @@ class ClassExtractor(cst.CSTVisitor):
 
         self.depth += 1
         try:
-            raw_code = cst.Module(body=[node]).code
+            raw_code = preprocess_code(cst.Module(body=[node]).code)
             class_def = raw_code.split(":")[0] + ":"
-            docstring = (
-                self.current_class.get("docstring", "") if self.current_class else ""
-            )
+            docstring = preprocess_code(node.get_docstring() or "")
             embedding = None
             if self.embeddings and self.model and self.device:
                 tokens_id = self.model.tokenize(
-                    [f"{class_def} {docstring}"], max_length=512, mode="<encoder-only>"
+                    [f"{class_def} {docstring}"],
+                    max_length=512,
+                    mode="<encoder-only>",
                 )
                 source_id = torch.tensor(tokens_id, device=self.device)
                 _, class_embedding = self.model(source_id)
@@ -117,13 +127,15 @@ class ClassExtractor(cst.CSTVisitor):
             # If we're not inside a class, skip method definitions
             return
         try:
-            raw_code = cst.Module(body=[node]).code
+            raw_code = preprocess_code(cst.Module(body=[node]).code)
             func_def = raw_code.split(":")[0] + ":"
-            docstring = node.get_docstring() or ""
+            docstring = preprocess_code(node.get_docstring() or "")
             embedding = None
             if self.embeddings and self.model and self.device:
                 tokens_id = self.model.tokenize(
-                    [f"{func_def} {docstring}"], max_length=512, mode="<encoder-only>"
+                    [f"{func_def} {docstring}"],
+                    max_length=512,
+                    mode="<encoder-only>",
                 )
                 source_id = torch.tensor(tokens_id, device=self.device)
                 _, method_embedding = self.model(source_id)
@@ -170,13 +182,15 @@ class FunctionExtractor(cst.CSTVisitor):
             return
 
         try:
-            raw_code = cst.Module(body=[node]).code
+            raw_code = preprocess_code(cst.Module(body=[node]).code)
             func_def = raw_code.split(":")[0] + ":"
-            docstring = node.get_docstring() or ""
+            docstring = preprocess_code(node.get_docstring() or "")
             embedding = None
             if self.embeddings and self.model and self.device:
                 tokens_id = self.model.tokenize(
-                    [f"{func_def} {docstring}"], max_length=512, mode="<encoder-only>"
+                    [f"{func_def} {docstring}"],
+                    max_length=512,
+                    mode="<encoder-only>",
                 )
                 source_id = torch.tensor(tokens_id, device=self.device)
                 _, func_embedding = self.model(source_id)
@@ -198,6 +212,74 @@ class FunctionExtractor(cst.CSTVisitor):
                 "embedding": None,
             }
             self.functions.append(func_info)
+
+
+def chunk_module_content(content: str, max_tokens: int = 1024) -> List[str]:
+    """Divide module content into chunks that fit within the token limit."""
+
+    # NOTE: explore other methods to fit more context into UniXcoder's 512 token limit
+    words = content.split()
+    chunks = []
+    current_chunk = []
+    current_length = 0
+
+    for word in words:
+        word_length = len(word)
+        if current_length + word_length + 1 > max_tokens:  # +1 for space
+            chunks.append(" ".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        current_chunk.append(word)
+        current_length += word_length + 1
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks
+
+
+def aggregate_embeddings(
+    embeddings: List[List[float]], strategy: str = "mean"
+) -> List[float]:
+    """Aggregate multiple embeddings into a single embedding using the specified strategy."""
+
+    if strategy == "mean":
+        return np.mean(embeddings, axis=0).tolist()
+    elif strategy == "max":
+        return np.max(embeddings, axis=0).tolist()
+    elif strategy == "weighted":
+        # TODO: i might consider weighting different module components differently
+        # weights = np.ones(len(embeddings)) / len(embeddings)
+        # return np.average(embeddings, axis=0, weights=weights).tolist()
+        raise NotImplementedError("Weighted aggregation is not implemented yet.")
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+
+
+def aggregate_module_embeddings(module_info: Dict[str, Any], strategy: str = "mean"):
+    """Aggregate embeddings from module information into a single embedding."""
+
+    all_embeddings = []
+
+    # Collect embeddings from classes
+    for cls in module_info.get("classes", []):
+        if cls.get("embedding") is not None:
+            all_embeddings.append(cls["embedding"])
+        for method in cls.get("methods", []):
+            if method.get("embedding") is not None:
+                all_embeddings.append(method["embedding"])
+
+    # Collect embeddings from functions
+    for func in module_info.get("functions", []):
+        if func.get("embedding") is not None:
+            all_embeddings.append(func["embedding"])
+
+    # Aggregate embeddings
+    if all_embeddings:
+        return aggregate_embeddings(all_embeddings, strategy)
+    else:
+        return None  # No embeddings to aggregate
 
 
 def extract_module_info(
@@ -229,9 +311,16 @@ def extract_module_info(
     tree.visit(class_extractor)
     tree.visit(function_extractor)
 
-    return {
+    module_info = {
         "docstring": docstring_extractor.docstring,
         "imports": import_extractor.imports,
         "classes": class_extractor.classes,
         "functions": function_extractor.functions,
+        "embedding": None,
     }
+    if include_embeddings:
+        module_info["embedding"] = aggregate_module_embeddings(
+            module_info, strategy="mean"
+        )
+
+    return module_info
