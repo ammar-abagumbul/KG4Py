@@ -52,7 +52,7 @@ class ChromaDBQueryEngine:
         return embedding
 
     # TODO: check whether results.documents and results.scores are exist (probably a dict key instead of an attribute)
-    def execute_query_nl(self, query: str, filters: Dict = None) -> List[dict]:
+    def execute_query_nl(self, query: str, filters: List[Dict] = None) -> List[dict]:
         """
         Execute a natural language query and retrieve results with optional filters.
 
@@ -72,8 +72,17 @@ class ChromaDBQueryEngine:
         """
         logger.info("Executing natural language query: %s", query)
         embedding = self.embedd_query(query)
+
+        if filters is not None and len(filters) > 1:
+            where = {"$or": filters}
+        elif filters is not None and len(filters) == 1:
+            # If only one filter is provided, use it directly
+            where = filters[0]
+        else:
+            where = None
+
         results = self.collection.query(
-            query_embeddings=embedding, n_results=self.limit
+            query_embeddings=embedding, n_results=self.limit, where=where
         )
 
         # Apply filters if provided

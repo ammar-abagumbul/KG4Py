@@ -58,6 +58,16 @@ def main():
                             "type": "class",
                         }
                     )
+                # add methods inside classes
+                for method in cls.get("methods", []):
+                    if "embedding" in method and "name" in method:
+                        items_to_add.append(
+                            {
+                                "embeddings": method["embedding"],
+                                "name": method["name"],
+                                "type": "method",
+                            }
+                        )
             # Functions
             for func in module.get("functions", []):
                 if "embedding" in func and "name" in func:

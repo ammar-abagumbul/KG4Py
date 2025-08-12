@@ -6,7 +6,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "${PROJECT_ROOT}" || exit
 
-SOURCE="${PROJECT_ROOT}/demo_repo"
+SOURCE="${PROJECT_ROOT}/manim"
 OUTPUT_JSON="${PROJECT_ROOT}/data/manim_features.json"
 DB_DIR="${PROJECT_ROOT}/data/chromadb"
 COLLECTION_NAME="manim_embeddings"  
