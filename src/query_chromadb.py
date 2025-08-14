@@ -1,5 +1,5 @@
 import chromadb
-from unixcoder import UniXcoder
+from models.unixcoder import UniXcoder
 import torch
 import logging
 

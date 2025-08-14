@@ -301,7 +301,7 @@ def extract_module_info(
     device = None
     if include_embeddings:
         import torch
-        from unixcoder import UniXcoder
+        from models.unixcoder import UniXcoder
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = UniXcoder("microsoft/unixcoder-base")
