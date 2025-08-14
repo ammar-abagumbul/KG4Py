@@ -134,6 +134,13 @@ Relationships capture semantic connections such as:
 - `INHERITS`: Class inheritance relationships
 - `CALLS`: Function call relationships
 
+## Acknowledgments
+
+This project includes code adapted from the [SweRank repository](https://github.com/SalesforceAIResearch/SweRank/) by Salesforce AI Research. 
+The code is used under the terms of the [Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/) license.
+
+For more details, refer to the original paper: [SweRank: A Benchmark for Software Engineering Ranking Models](https://arxiv.org/pdf/2505.07849).
+
 ## Current Status and Roadmap
 
 ### ✅ Completed Features

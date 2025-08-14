@@ -1,3 +1,11 @@
+# This file is adapted from the SweRank repository.
+# Original repository: https://github.com/SalesforceAIResearch/SweRank/
+# Authors: Salesforce AI Research
+# License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+# License details: https://creativecommons.org/licenses/by-nc/4.0/
+# 
+# Modifications have been made to integrate the code into the KG4Py project.
+
 from typing import List, Dict, Any
 
 
