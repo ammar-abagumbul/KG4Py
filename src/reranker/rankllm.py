@@ -1,5 +1,6 @@
 import re
 import copy
+from enum import Enum
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Union, Tuple
@@ -8,7 +9,16 @@ from .result import Result, RankingExecInfo
 Prompt = Union[str, List[Dict[str, str]]]
 
 
-def RankLLM(ABC):
+class PromptMode(Enum):
+    UNSPECIFIED = "unspecified"
+    RANK_GPT = "rank_GPT"
+    LRL = "LRL"
+
+    def __str__(self):
+        return self.value
+
+
+class RankLLM(ABC):
     """
     Abstract base class for the language model to be used for reranking
     """
@@ -17,9 +27,13 @@ def RankLLM(ABC):
         self,
         model: str,
         context_size: int,
+        prompt_mode: PromptMode,
+        num_few_shot_examples: int = 0,
     ):
         self.model = model
         self._context_size = context_size
+        self._prompt_mode = prompt_mode
+        self._num_few_shot_examples = num_few_shot_examples
         self._history = []
 
     def max_tokens(self):
@@ -120,13 +134,121 @@ def RankLLM(ABC):
         result = self.recieve_permutation(result, permutation, rank_start, rank_end)
         return result
 
+    def permutation_pipeline_batched(
+        self,
+        results: List[Result],
+        rank_start: int,
+        rank_end: int,
+        logging: bool = False,
+    ):
+        """
+        Runs the permutation pipeline on the passed in result set within the passed in rank range for a batch of results.
+        Args:
+            results (List[Result]): The list of result objects to process.
+            rank_start (int): The start index for ranking.
+            rank_end (int): The end index for ranking.
+            logging (bool, optional): Flag to enable logging of operations. Defaults to False.
+        Returns:
+            List[Result]: The processed list of result objects after applying permutation.
+        """
+        prompts = []
+        prompts = self.create_prompt_batched(
+            results, rank_start, rank_end, batch_size=32
+        )
+        batched_results = self.run_llm_batched(
+            [prompt for prompt, _ in prompts], current_window_size=rank_end - rank_start
+        )
+
+        for index, (result, (prompt, in_token_count)) in enumerate(
+            zip(results, prompts)
+        ):
+            permutation, out_token_count = batched_results[index]
+            if logging:
+                print(f"output: {permutation}")
+            ranking_exec_info = RankingExecInfo(
+                prompt, permutation, in_token_count, out_token_count
+            )
+            if result.ranking_exec_summary is None:
+                result.ranking_exec_summary = []
+            result.ranking_exec_summary.append(ranking_exec_info)
+            result = self.receive_permutation(result, permutation, rank_start, rank_end)
+
+    def sliding_window(
+        self,
+        retrieved_result: Result,
+        rank_start: int,
+        rank_end: int,
+        window_size: int,
+        step: int,
+        logging: bool = False,
+    ):
+        """
+        Applies the sliding window algorithm to the reranking process.
+
+        Args:
+            retrieved_result (Result): The result object to process.
+            rank_start (int): The start index for ranking.
+            rank_end (int): The end index for ranking.
+            window_size (int): The size of each sliding window.
+            step (int): The step size for moving the window.
+            logging (bool, optional): Flag to enable logging of operations. Defaults to False.
+
+        Returns:
+            Result: The result object after applying the sliding window technique.
+        """
+        rerank_result = copy.deepcopy(retrieved_result)
+        end_pos = rank_end
+        start_pos = rank_end - window_size
+        while end_pos > rank_start and start_pos + step != rank_start:
+            start_pos = max(start_pos, rank_start)
+            rerank_result = self.permutation_pipeline(
+                rerank_result, start_pos, end_pos, logging=logging
+            )
+            end_pos -= step
+            start_pos -= step
+        return rerank_result
+
+    def sliding_windows_batched(
+        self,
+        retrieved_results: List[Result],
+        use_logits: bool,
+        use_alpha: bool,
+        rank_start: int,
+        rank_end: int,
+        window_size: int,
+        step: int,
+        logging: bool = False,
+    ) -> List[Result]:
+        """
+        Applies the sliding window algorithm to the reranking process for a batch of result objects.
+        Args:
+            retrieved_results (List[Result]): The list of result objects to process.
+            rank_start (int): The start index for ranking.
+            rank_end (int): The end index for ranking.
+            window_size (int): The size of each sliding window.
+            step (int): The step size for moving the window.
+            logging (bool, optional): Flag to enable logging of operations. Defaults to False.
+        Returns:
+            List[Result]: The list of result objects after applying the sliding window technique.
+        """
+        rerank_results = [copy.deepcopy(result) for result in retrieved_results]
+        end_pos = rank_end
+        start_pos = rank_end - window_size
+        while end_pos > rank_start and start_pos + step != rank_start:
+            start_pos = max(start_pos, rank_start)
+            rerank_results = self.permutation_pipeline_batched(
+                rerank_results, start_pos, end_pos, logging=logging
+            )
+            end_pos -= step
+            start_pos -= step
+        return rerank_results
+
     def receive_permutation(
         self,
         result: Result,
         permutation: str,
         rank_start: int,
         rank_end: int,
-        use_alpha: bool,
     ) -> Result:
         """
         Processes and applies a permutation to the ranking results.
@@ -153,7 +275,7 @@ def RankLLM(ABC):
             Items not mentioned in the permutation string remain in their original sequence but are moved after
             the permuted items.
         """
-        response = self._clean_response(permutation, use_alpha)
+        response = self._clean_response(permutation)
         response = [int(x) - 1 for x in response.split()]
         response = self._remove_duplicate(response)
         cut_range = copy.deepcopy(result.hits[rank_start:rank_end])
@@ -208,6 +330,15 @@ def RankLLM(ABC):
                 print(f"re match FAILED: {response}")
                 return response, False
 
+    def _remove_duplicate(self, response: List[int]) -> List[int]:
+        seen = set()
+        unique_response = []
+        for item in response:
+            if item not in seen:
+                seen.add(item)
+                unique_response.append(item)
+        return unique_response
+
     def _clean_response(self, response: str) -> str:
         if self._rerank_type == "code_reasoning":
             response, _ = self.parse_reasoning_permutation(response)
@@ -221,3 +352,6 @@ def RankLLM(ABC):
             new_response = new_response.strip()
 
         return new_response
+
+    def _replace_number(self, s: str) -> str:
+        return re.sub(r"\[(\d+)\]", r"(\1)", s)
