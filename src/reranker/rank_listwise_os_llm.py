@@ -10,6 +10,8 @@
 # - Removed support for non-coding features
 # - Added support for system messages
 
+import json
+import random
 from typing import Optional, Tuple, List, Dict, Union, Any
 from concurrent.futures import ThreadPoolExecutor
 
@@ -20,9 +22,6 @@ from ftfy import fix_text
 
 from .rankllm import Prompt, PromptMode, RankLLM
 from .result import Result
-
-ALPH_START_IDX = ord("A") - 1
-
 
 class RankListwiseOSLLM(RankLLM):
     def __init__(
