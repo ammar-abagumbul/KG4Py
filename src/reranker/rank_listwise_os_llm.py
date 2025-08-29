@@ -341,7 +341,6 @@ class RankListwiseOSLLM(RankLLM):
     def create_prompt_batched(
         self,
         results: List[Result],
-        use_alpha: bool,
         rank_start: int,
         rank_end: int,
         batch_size: int = 32,
@@ -356,7 +355,7 @@ class RankListwiseOSLLM(RankLLM):
                 completed_prompts = list(
                     executor.map(
                         lambda result: self.create_prompt(
-                            result, use_alpha, rank_start, rank_end
+                            result, rank_start, rank_end
                         ),
                         batch,
                     )
