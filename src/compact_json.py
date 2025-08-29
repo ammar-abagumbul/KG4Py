@@ -12,6 +12,8 @@ ESCAPE_DCT = {
     "\r": "\\r",
     "\t": "\\t",
 }
+
+i = None
 for i in range(0x20):
     ESCAPE_DCT.setdefault(chr(i), "\\u{0:04x}".format(i))
     # ESCAPE_DCT.setdefault(chr(i), '\\u%04x' % (i,))
@@ -184,6 +186,7 @@ def _make_iterencode(
         if not lst:
             yield "[]"
             return
+        markerid = None
         if markers is not None:
             markerid = id(lst)
             if markerid in markers:
@@ -235,6 +238,7 @@ def _make_iterencode(
         if not dct:
             yield "{}"
             return
+        markerid = None
         if markers is not None:
             markerid = id(dct)
             if markerid in markers:
@@ -333,6 +337,7 @@ def _make_iterencode(
         elif isinstance(o, dict):
             yield from _iterencode_dict(o, _current_indent_level)
         else:
+            markerid = None
             if markers is not None:
                 markerid = id(o)
                 if markerid in markers:

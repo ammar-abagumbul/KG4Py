@@ -12,6 +12,7 @@ import os
 import json
 import time
 from pathlib import Path
+from neo4j import Query
 
 from config import (
     NEO4J_URI,
@@ -120,7 +121,7 @@ def escape_cypher_string(value: str) -> str:
     return f'"{escaped}"'
 
 
-def build_cypher_queries(module_info: dict) -> List[str]:
+def build_cypher_queries(module_info: dict) -> List[Query]:
     """Build Cypher queries from the extracted module information.
 
     Returns list of properly escaped string queries ready for execution.
@@ -181,6 +182,7 @@ def build_cypher_queries(module_info: dict) -> List[str]:
             f"MERGE (m)-[:CONTAINS]->(f)"
         )
 
+    # looping through each query and instantiating a Query object might be needed
     return queries
 
 
@@ -199,7 +201,7 @@ def save_to_json_fallback(module_info: dict, file_path: str) -> None:
 
 
 def execute_cypher(
-    driver: Driver, query: str, max_retries: int = 3, retry_delay: float = 2.0
+    driver: Driver, query: Query, max_retries: int = 3, retry_delay: float = 2.0
 ) -> str:
     """Execute a single Cypher query with retry mechanism. Returns True if successful, False otherwise."""
     error_message = ""
@@ -229,7 +231,7 @@ def execute_cypher(
     return error_message
 
 
-def populate_graph(driver: object, json_path: str) -> None:
+def populate_graph(driver: Driver, json_path: str) -> None:
     """
     Populate the Neo4j database with extracted content.
     This function orchestrates the parsing of Python source files and population of the Neo4j graph.
@@ -237,13 +239,15 @@ def populate_graph(driver: object, json_path: str) -> None:
     """
     logger.info("Starting to populate Neo4j graph with extracted content.")
     failed_files = []
-    repo_info = json.load(json_path)
+    with open(json_path, "r", encoding="utf-8") as json_file:
+        repo_info = json.load(json_file)
 
     for module_info in repo_info:
         if module_info:
             file_path = module_info.get("file_path", "unknown_file")
             queries = build_cypher_queries(module_info)
             success = True
+            error_message = ""
             for query in queries:
                 error_message = execute_cypher(driver, query)
                 if error_message:
@@ -293,7 +297,7 @@ def main() -> int:
     # Clear database if requested
     if args.clear_database:
         logger.warning("Clearing all data in Neo4j database as requested.")
-        clear_query = "MATCH (n) DETACH DELETE n"
+        clear_query = Query("MATCH (n) DETACH DELETE n")
         error_message = execute_cypher(driver, clear_query)
         if error_message:
             logger.error("Failed to clear database. Proceeding anyway.")
