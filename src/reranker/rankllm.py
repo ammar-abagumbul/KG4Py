@@ -3,7 +3,7 @@
 # Authors: Salesforce AI Research
 # License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 # License details: https://creativecommons.org/licenses/by-nc/4.0/
-# 
+#
 # Modifications have been made to integrate the code into the KG4Py project.
 
 import re
@@ -11,7 +11,7 @@ import copy
 from enum import Enum
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Union, Tuple
+from typing import Optional, List, Dict, Union, Tuple
 from .result import Result, RankingExecInfo
 
 Prompt = Union[str, List[Dict[str, str]]]
@@ -43,6 +43,7 @@ class RankLLM(ABC):
         self._prompt_mode = prompt_mode
         self._num_few_shot_examples = num_few_shot_examples
         self._history = []
+        self._rerank_type = "code_reasoning"
 
     def max_tokens(self):
         """
@@ -51,7 +52,7 @@ class RankLLM(ABC):
         return self._context_size
 
     @abstractmethod
-    def run_llm(self, prompt: Prompt) -> Tuple[str, int]:
+    def run_llm(self, prompt: Prompt, current_window_size: int) -> Tuple[str, int]:
         """
         Abstract method to run the target language model with a passed in prompt.
 
@@ -87,7 +88,7 @@ class RankLLM(ABC):
 
     @abstractmethod
     def create_prompt(
-        self, results: List[Result], rank_start: int, rank_end: int
+        self, result: Result, rank_start: int, rank_end: int
     ) -> Tuple[Prompt, int]:
         """
         Abstract method to create a prompt based on the result and given ranking range.
@@ -139,7 +140,7 @@ class RankLLM(ABC):
 
         result.ranking_exec_summary.append(ranking_exec_info)
 
-        result = self.recieve_permutation(result, permutation, rank_start, rank_end)
+        result = self.receive_permutation(result, permutation, rank_start, rank_end)
         return result
 
     def permutation_pipeline_batched(
@@ -148,7 +149,7 @@ class RankLLM(ABC):
         rank_start: int,
         rank_end: int,
         logging: bool = False,
-    ):
+    ) -> List[Result]:
         """
         Runs the permutation pipeline on the passed in result set within the passed in rank range for a batch of results.
         Args:
@@ -166,7 +167,7 @@ class RankLLM(ABC):
         batched_results = self.run_llm_batched(
             [prompt for prompt, _ in prompts], current_window_size=rank_end - rank_start
         )
-
+        results = []
         for index, (result, (prompt, in_token_count)) in enumerate(
             zip(results, prompts)
         ):
@@ -180,6 +181,8 @@ class RankLLM(ABC):
                 result.ranking_exec_summary = []
             result.ranking_exec_summary.append(ranking_exec_info)
             result = self.receive_permutation(result, permutation, rank_start, rank_end)
+            results.append(result)
+        return results
 
     def sliding_window(
         self,
@@ -219,8 +222,6 @@ class RankLLM(ABC):
     def sliding_windows_batched(
         self,
         retrieved_results: List[Result],
-        use_logits: bool,
-        use_alpha: bool,
         rank_start: int,
         rank_end: int,
         window_size: int,
@@ -242,14 +243,15 @@ class RankLLM(ABC):
         rerank_results = [copy.deepcopy(result) for result in retrieved_results]
         end_pos = rank_end
         start_pos = rank_end - window_size
+        permutated_results = rerank_results
         while end_pos > rank_start and start_pos + step != rank_start:
             start_pos = max(start_pos, rank_start)
-            rerank_results = self.permutation_pipeline_batched(
+            permutated_results = self.permutation_pipeline_batched(
                 rerank_results, start_pos, end_pos, logging=logging
             )
             end_pos -= step
             start_pos -= step
-        return rerank_results
+        return permutated_results
 
     def receive_permutation(
         self,
@@ -298,7 +300,7 @@ class RankLLM(ABC):
                 result.hits[j + rank_start]["score"] = cut_range[j]["score"]
         return result
 
-    def parse_reasoning_permutation(self, response: str) -> str:
+    def parse_reasoning_permutation(self, response: str) -> Tuple[str, bool]:
         ranked_list_pattern = r"\s*(\[\d+\](?:\s*>\s*\[\d+\])*)\s*"
         end_of_reasoning_tag = "</think>"
         start_of_answer_tag = "<answer>"
@@ -337,6 +339,13 @@ class RankLLM(ABC):
             else:
                 print(f"re match FAILED: {response}")
                 return response, False
+
+    def run_llm_batched(
+        self,
+        prompts: List[Union[str, List[Dict[str, str]]]],
+        current_window_size: Optional[int] = None,
+    ) -> List[Tuple[str, int]]:
+        ...
 
     def _remove_duplicate(self, response: List[int]) -> List[int]:
         seen = set()

@@ -5,18 +5,20 @@
 # License details: https://creativecommons.org/licenses/by-nc/4.0/
 #
 # Modifications have been made to integrate the code into the KG4Py project.
+# List of major modifications:
+# - Used HuggingFace Transformers instead of vLLM
+# - Removed support for non-coding features
+# - Added support for system messages
 
-import json
-import random
-from typing import Optional, Tuple, List, Dict, Union
+from typing import Optional, Tuple, List, Dict, Union, Any
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import torch.nn.functional as F
-from ftfy import fix_text
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from ftfy import fix_text
 
-from .rankllm import PromptMode, RankLLM
+from .rankllm import Prompt, PromptMode, RankLLM
 from .result import Result
 
 ALPH_START_IDX = ord("A") - 1
@@ -33,9 +35,9 @@ class RankListwiseOSLLM(RankLLM):
         num_gpus: int = 0,
         variable_passages: bool = False,
         window_size: int = 20,
-        system_message: str = None,
+        system_message: Optional[str] = None,
         batched: bool = False,
-        rerank_type: str = "text",
+        rerank_type: str = "code_reasoning",
         code_prompt_type: str = "docstring",
         load_in_8bit: bool = False,
         load_in_4bit: bool = False,
@@ -75,7 +77,7 @@ class RankListwiseOSLLM(RankLLM):
             else:
                 dtype = torch.float32
 
-        model_load_kwargs = dict(
+        model_load_kwargs: Dict[str, Any] = dict(
             trust_remote_code=True,
         )
         if device_map is not None:
@@ -115,7 +117,7 @@ class RankListwiseOSLLM(RankLLM):
             ids = self._tokenizer.encode(s, add_special_tokens=False)
             if len(ids) == 1:
                 evaluations[n] = float(logprobs[ids[0]].item())
-        sorted_evals = sorted(evaluations.itemms(), key=lambda x: -x[1])
+        sorted_evals = sorted(evaluations.items(), key=lambda x: -x[1])
         result_string = ">".join([f"[{k}]" for k, _ in sorted_evals])
 
         return result_string, evaluations
@@ -138,7 +140,7 @@ class RankListwiseOSLLM(RankLLM):
     # ------ Generation ------
 
     def run_llm(
-        self, prompt: str, current_window_size: Optional[int] = None
+        self, prompt: Prompt, current_window_size: Optional[int] = None
     ) -> Tuple[str, int]:
         """Run the LM"""
         if current_window_size is None:
@@ -265,7 +267,7 @@ class RankListwiseOSLLM(RankLLM):
 
     def create_prompt(
         self, result: Result, rank_start: int, rank_end: int
-    ) -> Tuple[str, int]:
+    ) -> Tuple[Prompt, int]:
         """
         Create a prompt for the LLM based on the result and the rank range.
         """
@@ -344,7 +346,7 @@ class RankListwiseOSLLM(RankLLM):
         rank_start: int,
         rank_end: int,
         batch_size: int = 32,
-    ) -> List[Tuple[str, int]]:
+    ) -> List[Tuple[Prompt, int]]:
         def chunks(lst, n):
             for i in range(0, len(lst), n):
                 yield lst[i : i + n]
