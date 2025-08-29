@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from ftfy import fix_text
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from .ranakllm import PromptMode, RankLLM
+from .rankllm import PromptMode, RankLLM
 from .result import Result
 
 ALPH_START_IDX = ord("A") - 1
