@@ -3,7 +3,7 @@
 # Authors: Salesforce AI Research
 # License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 # License details: https://creativecommons.org/licenses/by-nc/4.0/
-# 
+#
 # Modifications have been made to integrate the code into the KG4Py project.
 
 import json
@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from ftfy import fix_text
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from .rnakllm import PromptMode, RankLLM
+from .ranakllm import PromptMode, RankLLM
 from .result import Result
 
 ALPH_START_IDX = ord("A") - 1
@@ -336,7 +336,7 @@ class RankListwiseOSLLM(RankLLM):
                         )
                         // ((rank_end - rank_start) * 4),
                     )
-            return prompt, num_tokens
+        return prompt, num_tokens
 
     def create_prompt_batched(
         self,
