@@ -109,7 +109,7 @@ class RankLLM(ABC):
         rank_start: int,
         rank_end: int,
         logging: bool = False,
-    ):
+    ) ->  Result:
         """
         Runs the permutation pipeline on the passed in result set within the passed in rank range.
 

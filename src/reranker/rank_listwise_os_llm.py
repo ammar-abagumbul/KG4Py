@@ -47,7 +47,11 @@ class RankListwiseOSLLM(RankLLM):
                 f"Unsupported prompt mode: {prompt_mode}. Only RANK_GPT is supported."
             )
 
-        self._device = device
+        if device == "cuda":
+            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self._device = torch.device("cpu")
+
         self._batched = batched
         self._variable_passages = variable_passages
         self._window_size = window_size
@@ -87,6 +91,7 @@ class RankListwiseOSLLM(RankLLM):
             model_load_kwargs["torch_dtype"] = dtype
 
         self._model = AutoModelForCausalLM.from_pretrained(model, **model_load_kwargs)
+        self._model.to(self._device)
 
         if getattr(self._model, "get_input_embeddings", None) and (
             self._model.get_input_embeddings().weight.size(0) != len(self._tokenizer)
@@ -97,7 +102,6 @@ class RankListwiseOSLLM(RankLLM):
             self._tokenizer.chat_template is not None
             and "system" in self._tokenizer.chat_template
         )
-
         # TODO: if you decide to use few_shot_examples, implement a logic to load them
 
     def _evaluate_logits_from_next_token_distribution(

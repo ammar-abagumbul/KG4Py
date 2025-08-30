@@ -1,13 +1,12 @@
 import chromadb
-from chromadb import QueryResult
-from transformers.generation.utils import SampleDecoderOnlyOutput
+from chromadb.types import Where
 from models.unixcoder import UniXcoder
 from reranker import Result, RankListwiseOSLLM
 
 import torch
 import logging
 
-from typing import Optional, List, Dict
+from typing import Optional, List
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ class ChromaDBQueryEngine:
         self.limit = limit
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = UniXcoder("microsoft/unixcoder-base")
-        self.reranker =
+        self.reranker = RankListwiseOSLLM("Salesforce/SweRankLLM-Small", device=self.device.type)
         logger.info("UniXcoder model loaded and moved to device: %s", self.device)
         self.model.to(self.device)
 
@@ -53,38 +52,36 @@ class ChromaDBQueryEngine:
         logger.info("Embedding generated successfully. Length: %d", len(embedding))
         return embedding
 
-    def rerank_hits(self, hits) -> Result:
-        ...
+    def rerank_hits(self, result: Result) -> Result:
+        reranked_result = self.reranker.permutation_pipeline(
+            result,
+            1,
+            len(result.hits),
+            logging=True
+        )
+        return reranked_result
 
-
-    def execute_query_nl(self, query: str, or_filters: Optional[List[Dict[str, str]]] = None) -> Result:
+    def execute_query_nl(self, query: str, where: Optional[Where]) -> Result:
         """
         Execute a natural language query and retrieve results with optional filters.
 
         Args:
             query (str): The natural language query.
-            filters (dict): Optional filters to apply to the results.
+            where (Where, optional): A filter expression supporting 'and', 'or', and key-value pairs.
 
         Returns:
-            list[dict]: A list of ranked results with metadata.
+            Result: A result object containing ranked results with metadata.
 
         Example:
             query = "What is the purpose of the module?"
-            filters = {"type": "class"}
-            results = engine.execute_query_nl(query, filters)
+            where = {"$or": [{"type": "class"}, {"type": "function"}]}
+            results = engine.execute_query_nl(query, where=where)
 
-        future work: more complex filters, e.g., regex matching, multiple conditions
+            # For AND filtering:
+            where = {"$and": [{"type": "class"}, {"author": "Alice"}]}
         """
         logger.info("Executing natural language query: %s", query)
         embedding = self.embedd_query(query)
-
-        if or_filters is not None and len(or_filters) > 1:
-            where = {"$or": or_filters}
-        elif or_filters is not None and len(or_filters) == 1:
-            # If only one filter is provided, use it directly
-            where = or_filters[0]
-        else:
-            where = None
 
         results = self.collection.query(
             query_embeddings=embedding, n_results=self.limit, where=where
@@ -103,21 +100,5 @@ class ChromaDBQueryEngine:
 
     def execute_query_e(self, embedding: list[float]):
         pass
-
-    def rerank_results(self, results: List[dict], query: str) -> List[dict]:
-        """
-        Rerank the results based on the query.
-
-        Args:
-            results (list[dict]): The initial results to rerank.
-            query (str): The original query used for reranking.
-
-        Returns:
-            list[dict]: The reranked results.
-        """
-        # Placeholder for reranking logic
-        logger.warning("Reranking logic is not implemented yet.")
-        raise NotImplementedError("Reranking logic is not implemented yet.")
-
 
 engine = ChromaDBQueryEngine("manim_embeddings", "../data/chromadb/")
