@@ -3,10 +3,10 @@
 # Authors: Salesforce AI Research
 # License: Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 # License details: https://creativecommons.org/licenses/by-nc/4.0/
-# 
+#
 # Modifications have been made to integrate the code into the KG4Py project.
 
-from typing import List, Dict, Any
+from typing import Optional, List, Dict, Any
 
 
 class RankingExecInfo:
@@ -27,7 +27,7 @@ class Result:
         self,
         query: str,
         hits: List[Dict[str, Any]],
-        ranking_exec_summary: List[RankingExecInfo] = None,
+        ranking_exec_summary: Optional[List[RankingExecInfo]] = None,
     ):
         self.query = query
         self.hits = hits
