@@ -1,9 +1,13 @@
 import chromadb
+from chromadb import QueryResult
+from transformers.generation.utils import SampleDecoderOnlyOutput
 from models.unixcoder import UniXcoder
+from reranker import Result, RankListwiseOSLLM
+
 import torch
 import logging
 
-from typing import List, Dict
+from typing import Optional, List, Dict
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -31,17 +35,15 @@ class ChromaDBQueryEngine:
             path="../data/chromadb/",
         )
         self.collection = self.chroma_client.get_collection(name=collection_name)
-        # Ensure module-level embeddings field exists in the database schema
-        if "module_embedding" not in self.collection.metadata_fields:
-            self.collection.add_metadata_field("module_embedding")
 
         self.limit = limit
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = UniXcoder("microsoft/unixcoder-base")
+        self.reranker =
         logger.info("UniXcoder model loaded and moved to device: %s", self.device)
         self.model.to(self.device)
 
-    def embedd_query(self, query: str) -> list[float]:
+    def embedd_query(self, query: str) -> List[float]:
         tokens_id = self.model.tokenize(
             [f"{query}"], max_length=512, mode="<encoder-only>"
         )
@@ -51,8 +53,11 @@ class ChromaDBQueryEngine:
         logger.info("Embedding generated successfully. Length: %d", len(embedding))
         return embedding
 
-    # TODO: check whether results.documents and results.scores are exist (probably a dict key instead of an attribute)
-    def execute_query_nl(self, query: str, filters: List[Dict] = None) -> List[dict]:
+    def rerank_hits(self, hits) -> Result:
+        ...
+
+
+    def execute_query_nl(self, query: str, or_filters: Optional[List[Dict[str, str]]] = None) -> Result:
         """
         Execute a natural language query and retrieve results with optional filters.
 
@@ -73,32 +78,28 @@ class ChromaDBQueryEngine:
         logger.info("Executing natural language query: %s", query)
         embedding = self.embedd_query(query)
 
-        if filters is not None and len(filters) > 1:
-            where = {"$or": filters}
-        elif filters is not None and len(filters) == 1:
+        if or_filters is not None and len(or_filters) > 1:
+            where = {"$or": or_filters}
+        elif or_filters is not None and len(or_filters) == 1:
             # If only one filter is provided, use it directly
-            where = filters[0]
+            where = or_filters[0]
         else:
             where = None
 
         results = self.collection.query(
             query_embeddings=embedding, n_results=self.limit, where=where
         )
-
-        # Apply filters if provided
-        if filters:
-            filtered_results = []
-            for result in results["documents"]:
-                match = all(result.get(key) == value for key, value in filters.items())
-                if match:
-                    filtered_results.append(result)
-            results.documents = filtered_results
-        result = self.collection.query(query_embeddings=embedding, n_results=self.limit)
+        documents = results["documents"] or []
         logger.info(
             "Query executed successfully. Number of results: %d",
-            len(results.get("documents", [])),
+            len(documents),
         )
-        return results
+        result = Result(
+            query=query,
+            hits=[{"content": content} for content in documents]
+        )
+        result = self.rerank_hits(result)
+        return result
 
     def execute_query_e(self, embedding: list[float]):
         pass
