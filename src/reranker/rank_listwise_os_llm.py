@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import torch.nn.functional as F
+from accelerate import disk_offload
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from ftfy import fix_text
 
@@ -36,10 +37,7 @@ class RankListwiseOSLLM(RankLLM):
         batched: bool = False,
         rerank_type: str = "code_reasoning",
         code_prompt_type: str = "docstring",
-        load_in_8bit: bool = False,
-        load_in_4bit: bool = False,
         torch_dtype: Optional[torch.dtype] = torch.float32,
-        device_map: Optional[Union[str, Dict[str, str]]] = "auto",
     ) -> None:
         super().__init__(model, context_size, prompt_mode, num_few_shot_examples)
         if prompt_mode != PromptMode.RANK_GPT:
@@ -47,10 +45,11 @@ class RankListwiseOSLLM(RankLLM):
                 f"Unsupported prompt mode: {prompt_mode}. Only RANK_GPT is supported."
             )
 
-        if device == "cuda":
-            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available() and device == "cuda":
+            self._device = torch.device("cuda")
         else:
             self._device = torch.device("cpu")
+            device = "cpu"
 
         self._batched = batched
         self._variable_passages = variable_passages
@@ -69,38 +68,25 @@ class RankListwiseOSLLM(RankLLM):
             else:
                 self._tokenizer.add_special_tokens({"pad_token": "<|PAD|>"})
 
-        dtype = torch_dtype
-        if dtype is None:
-            if torch.cuda.is_available():
-                dtype = (
-                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                )
-            else:
-                dtype = torch.float32
-
-        model_load_kwargs: Dict[str, Any] = dict(
+        self._model = AutoModelForCausalLM.from_pretrained(
+            model,
+            device_map="auto",           # let accelerate decide
+            torch_dtype=torch.float16,   # half precision to save space
             trust_remote_code=True,
         )
-        if device_map is not None:
-            model_load_kwargs["device_map"] = device_map
-        if load_in_8bit:
-            model_load_kwargs["load_in_8bit"] = True
-        if load_in_4bit:
-            model_load_kwargs["load_in_4bit"] = True
-        if not load_in_8bit and not load_in_4bit:
-            model_load_kwargs["torch_dtype"] = dtype
 
-        self._model = AutoModelForCausalLM.from_pretrained(model, **model_load_kwargs)
-        self._model.to(self._device)
-
+        # make sure embeddings and tokenizer match
         if getattr(self._model, "get_input_embeddings", None) and (
             self._model.get_input_embeddings().weight.size(0) != len(self._tokenizer)
         ):
             self._model.resize_token_embeddings(len(self._tokenizer))
 
-        self.system_message_supported = hasattr(self._tokenizer, "chat_template") and (
-            self._tokenizer.chat_template is not None
-            and "system" in self._tokenizer.chat_template
+        self._model = disk_offload(self._model, offload_dir="/model_offload")
+
+        # 3. chat template support (safe)
+        chat_template = getattr(self._tokenizer, "chat_template", None)
+        self.system_message_supported = (
+            isinstance(chat_template, str) and "system" in chat_template
         )
         # TODO: if you decide to use few_shot_examples, implement a logic to load them
 
