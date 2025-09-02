@@ -55,6 +55,7 @@ def main():
                         {
                             "embeddings": cls["embedding"],
                             "name": cls["name"],
+                            "document": cls["docstring"],
                             "type": "class",
                         }
                     )
@@ -65,6 +66,7 @@ def main():
                             {
                                 "embeddings": method["embedding"],
                                 "name": method["name"],
+                                "document": method["code"],
                                 "type": "method",
                             }
                         )
@@ -75,6 +77,7 @@ def main():
                         {
                             "embeddings": func["embedding"],
                             "name": func["name"],
+                            "document": func["code"],
                             "type": "function",
                         }
                     )
@@ -92,6 +95,7 @@ def main():
                 embeddings=item["embeddings"],
                 ids=[str(idx)],
                 metadatas=[{"name": item["name"], "type": item["type"]}],
+                documents=[item["document"]]
             )
         except Exception as e:
             logger.error(

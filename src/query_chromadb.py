@@ -29,10 +29,7 @@ class ChromaDBQueryEngine:
         )
         self.collection_name = collection_name
         self.persist_directory = persist_directory
-
-        self.chroma_client = chromadb.PersistentClient(
-            path="../data/chromadb/",
-        )
+        self.chroma_client = chromadb.PersistentClient(path=persist_directory)
         self.collection = self.chroma_client.get_collection(name=collection_name)
 
         self.limit = limit
@@ -86,14 +83,14 @@ class ChromaDBQueryEngine:
         results = self.collection.query(
             query_embeddings=embedding, n_results=self.limit, where=where
         )
-        documents = results["documents"] or []
+        documents = results["documents"] or [[]]
         logger.info(
             "Query executed successfully. Number of results: %d",
             len(documents),
         )
         result = Result(
             query=query,
-            hits=[{"content": content} for content in documents]
+            hits=[{"content": content} for content in documents[0]]
         )
         result = self.rerank_hits(result)
         return result
