@@ -1,7 +1,11 @@
+import json
+import os
+from dotenv import load_dotenv
+import requests
 import chromadb
 from chromadb.types import Where
 from models.unixcoder import UniXcoder
-from reranker import Result, RankListwiseOSLLM
+from reranker import Result
 
 import torch
 import logging
@@ -11,6 +15,9 @@ from typing import Optional, List
 # Initialize logger
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+
+HUGGINGFACE_URL = os.getenv("HUGGINGFACE_URL")
 
 class ChromaDBQueryEngine:
     def __init__(self, collection_name, persist_directory, limit=5):
@@ -35,7 +42,6 @@ class ChromaDBQueryEngine:
         self.limit = limit
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = UniXcoder("microsoft/unixcoder-base")
-        self.reranker = RankListwiseOSLLM("Salesforce/SweRankLLM-Small", device=self.device.type)
         logger.info("UniXcoder model loaded and moved to device: %s", self.device)
         self.model.to(self.device)
 
@@ -49,14 +55,27 @@ class ChromaDBQueryEngine:
         logger.info("Embedding generated successfully. Length: %d", len(embedding))
         return embedding
 
-    def rerank_hits(self, result: Result) -> Result:
-        reranked_result = self.reranker.permutation_pipeline(
-            result,
-            1,
-            len(result.hits),
-            logging=True
+    def rerank_hits(self, query: str, result: Result) -> Result:
+        # construct payload
+        payload = {
+            "query": query,
+            "hits": [(i + 1, item["content"]) for i, item in enumerate(result.hits)]
+        }
+
+        assert HUGGINGFACE_URL is not None, "HUGGINGFACE_URL is not set"
+
+        response = requests.post(HUGGINGFACE_URL, json=payload)
+        data = json.loads(response.text)
+
+        assert data["query"] == query
+        hits = data["reranked_hits"]
+
+        result = Result(
+            query=query,
+            hits=[{"content": item[1]} for item in hits],
         )
-        return reranked_result
+        return result
+
 
     def execute_query_nl(self, query: str, where: Optional[Where]) -> Result:
         """
@@ -92,7 +111,7 @@ class ChromaDBQueryEngine:
             query=query,
             hits=[{"content": content} for content in documents[0]]
         )
-        result = self.rerank_hits(result)
+        result = self.rerank_hits(query, result)
         return result
 
     def execute_query_e(self, embedding: list[float]):
