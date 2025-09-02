@@ -1,3 +1,4 @@
+from json import JSONEncoder
 import re
 
 ESCAPE = re.compile(r'[\x00-\x1f\\"\b\f\n\r\t]')
@@ -59,7 +60,7 @@ def py_encode_basestring_ascii(s):
 encode_basestring_ascii = py_encode_basestring_ascii
 
 
-class CompactJSONEncoder(object):
+class CompactJSONEncoder(JSONEncoder):
     item_separator = ", "
     key_separator = ": "
 
