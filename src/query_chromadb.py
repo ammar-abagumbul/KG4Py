@@ -102,14 +102,26 @@ class ChromaDBQueryEngine:
         results = self.collection.query(
             query_embeddings=embedding, n_results=self.limit, where=where
         )
+
         documents = results["documents"] or [[]]
+        metadatas = results["metadatas"] or [[]]
+
+        # Todo implement logging for preliminary chromadb query results
         logger.info(
             "Query executed successfully. Number of results: %d",
             len(documents),
         )
+
+        # sanitize documents, empty docs should be replaced by the name of the function/class
+        sanitized_documents = []
+        for doc, meta in zip(documents[0], metadatas[0]):
+            if not doc:
+                doc = meta["name"]
+            sanitized_documents.append(doc)
+
         result = Result(
             query=query,
-            hits=[{"content": content} for content in documents[0]]
+            hits=[{"content": content} for content in sanitized_documents]
         )
         result = self.rerank_hits(query, result)
         return result
