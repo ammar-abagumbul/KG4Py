@@ -129,7 +129,7 @@ def construct_json(
             with json_path.open("w", encoding="utf-8") as f:
                 json.dump(extracted_data, f, indent=4, cls=CompactJSONEncoder)
             logger.info("JSON file successfully created at %s.", output_json)
-            return True
+        return True
     except Exception as e:
         logger.error("Error constructing JSON file: %s", e)
         return False
