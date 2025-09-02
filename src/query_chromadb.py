@@ -77,7 +77,7 @@ class ChromaDBQueryEngine:
         return result
 
 
-    def execute_query_nl(self, query: str, where: Optional[Where]) -> Result:
+    def execute_query_nl(self, query: str, where: Optional[Where] = None) -> Result:
         """
         Execute a natural language query and retrieve results with optional filters.
 
