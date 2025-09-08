@@ -255,8 +255,8 @@ class RankLLM(ABC):
 
     def receive_permutation(
         self,
-        result: Result,
-        permutation: str,
+        result: Result,   # original result before reranking
+        permutation: str, # permutation string suggested by the model
         rank_start: int,
         rank_end: int,
     ) -> Result:
@@ -291,13 +291,14 @@ class RankLLM(ABC):
         cut_range = copy.deepcopy(result.hits[rank_start:rank_end])
         original_rank = [tt for tt in range(len(cut_range))]
         response = [ss for ss in response if ss in original_rank]
-        response = response + [tt for tt in original_rank if tt not in response]
+        response = response + [tt for tt in original_rank if tt in response]
         for j, x in enumerate(response):
             result.hits[j + rank_start] = copy.deepcopy(cut_range[x])
             if "rank" in result.hits[j + rank_start]:
                 result.hits[j + rank_start]["rank"] = cut_range[j]["rank"]
             if "score" in result.hits[j + rank_start]:
                 result.hits[j + rank_start]["score"] = cut_range[j]["score"]
+        # ERROR: double check this method, permutation string not applied correctly
         return result
 
     def parse_reasoning_permutation(self, response: str) -> Tuple[str, bool]:
@@ -357,6 +358,7 @@ class RankLLM(ABC):
         return unique_response
 
     def _clean_response(self, response: str) -> str:
+        # Todo: this does not appear ncessary
         if self._rerank_type == "code_reasoning":
             response, _ = self.parse_reasoning_permutation(response)
 
